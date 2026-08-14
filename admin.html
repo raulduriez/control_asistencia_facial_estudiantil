@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel Administrativo - Control de Asistencia UNRMA</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Firebase Compat -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --institucional-blue: #008fd3;
+      --bg-gradient: radial-gradient(circle at 50% 10%, #005e8a 0%, #021a2e 50%, #010c17 100%);
+      --cyan-light: #38bdf8;
+      --cyan-neon: #00e5ff;
+      --card-bg: rgba(2, 26, 46, 0.88);
+      --border-glow: rgba(0, 229, 255, 0.3);
+      --text-main: #f0f9ff;
+      --text-muted: #93c5fd;
+      --danger: #f43f5e;
+      --success: #10b981;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    
+    body {
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Pantalla de Bloqueo / Login */
+    #login-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 12, 23, 0.95);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .login-box {
+      background: #021a2e;
+      border: 2px solid var(--institucional-blue);
+      border-radius: 16px;
+      padding: 30px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+      box-shadow: 0 0 40px rgba(0, 143, 211, 0.5);
+    }
+
+    .login-box h2 {
+      font-family: 'Cinzel', serif;
+      color: #fff;
+      font-size: 1.3rem;
+      margin-bottom: 8px;
+    }
+
+    .login-box p {
+      font-size: 0.85rem;
+      color: var(--cyan-light);
+      margin-bottom: 20px;
+    }
+
+    .login-box input {
+      width: 100%;
+      padding: 12px;
+      background: #010c17;
+      border: 1px solid var(--cyan-light);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 1rem;
+      text-align: center;
+      letter-spacing: 2px;
+      margin-bottom: 16px;
+      outline: none;
+    }
+
+    .btn-login {
+      width: 100%;
+      background: linear-gradient(135deg, var(--institucional-blue) 0%, #00b4d8 100%);
+      color: #fff;
+      border: 1px solid var(--cyan-neon);
+      padding: 12px;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    /* Panel Principal */
+    header {
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .brand-title {
+      font-family: 'Cinzel', serif;
+      font-size: 1.2rem;
+      color: #fff;
+    }
+
+    .btn-nav {
+      background: rgba(0, 143, 211, 0.2);
+      border: 1px solid var(--cyan-light);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Tarjetas de Estadísticas */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-glow);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    }
+
+    .metric-card span { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
+    .metric-card strong { font-size: 2rem; color: var(--cyan-neon); font-weight: 800; }
+
+    /* Tablas y Contenedores */
+    .table-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-glow);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+    }
+
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .table-header h3 { font-size: 1.15rem; color: #fff; }
+
+    .search-input {
+      padding: 8px 14px;
+      background: #010c17;
+      border: 1px solid var(--border-glow);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.85rem;
+      min-width: 240px;
+    }
+
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(0, 143, 211, 0.2);
+      color: var(--cyan-light);
+      padding: 12px 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      border-bottom: 1px solid var(--border-glow);
+    }
+
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      vertical-align: middle;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .student-img-mini {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1.5px solid var(--cyan-neon);
+    }
+
+    .btn-delete {
+      background: rgba(244, 63, 94, 0.2);
+      border: 1px solid var(--danger);
+      color: #fb7185;
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .btn-delete:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Modal de Autenticación / PIN -->
+  <div id="login-overlay">
+    <div class="login-box">
+      <h2>Acceso Administrativo</h2>
+      <p>UNRMA - Registro de Estudiantes</p>
+      <form id="form-login">
+        <input type="password" id="input-pin" placeholder="Ingrese Contraseña" required autocomplete="off">
+        <button type="submit" class="btn-login">Ingresar al Panel</button>
+      </form>
+      <p id="login-error" style="color: var(--danger); font-size: 0.8rem; margin-top: 10px; display: none;">Contraseña Incorrecta</p>
+    </div>
+  </div>
+
+  <!-- Contenido Privado del Panel -->
+  <header>
+    <div class="brand-title">Panel de Control & Estudiantes</div>
+    <a href="./index.html" class="btn-nav">📷 Volver al Escáner de Cámara</a>
+  </header>
+
+  <main class="container">
+    <!-- Tarjetas con Contadores -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <span>Estudiantes Matriculados</span>
+        <strong id="count-estudiantes">0</strong>
+      </div>
+      <div class="metric-card">
+        <span>Asistencias Registradas</span>
+        <strong id="count-asistencias">0</strong>
+      </div>
+    </div>
+
+    <!-- Tabla: Base de Datos de Estudiantes -->
+    <section class="table-card">
+      <div class="table-header">
+        <h3>Lista de Estudiantes Registrados</h3>
+        <input type="text" id="search-estudiante" class="search-input" placeholder="🔍 Buscar por nombre o cédula...">
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Foto</th>
+              <th>Cédula</th>
+              <th>Nombre Completo</th>
+              <th>Edad / Estado Civil</th>
+              <th>Padres</th>
+              <th>Clase / Docente</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-estudiantes">
+            <tr><td colspan="7" style="text-align:center; color: var(--text-muted);">Cargando base de datos...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tabla: Historial de Asistencias Tomadas -->
+    <section class="table-card">
+      <div class="table-header">
+        <h3>Últimas Asistencias Marcadas por Escáner</h3>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha y Hora</th>
+              <th>Cédula</th>
+              <th>Estudiante</th>
+              <th>Clase</th>
+              <th>Docente</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-asistencias">
+            <tr><td colspan="6" style="text-align:center; color: var(--text-muted);">Cargando historial...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ==========================================
+    // 1. CLAVE DE ACCESO AL PANEL
+    // ==========================================
+    const CLAVE_ADMIN = "unrma2026"; // <-- PUEDES CAMBIAR TU CONTRASEÑA AQUÍ
+
+    const loginOverlay = document.getElementById('login-overlay');
+    const formLogin = document.getElementById('form-login');
+    const inputPin = document.getElementById('input-pin');
+    const loginError = document.getElementById('login-error');
+
+    formLogin.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (inputPin.value.trim() === CLAVE_ADMIN) {
+        loginOverlay.style.display = 'none';
+        cargarDatosAdmin();
+      } else {
+        loginError.style.display = 'block';
+        inputPin.value = '';
+      }
+    });
+
+    // ==========================================
+    // 2. CONEXIÓN A FIREBASE
+    // ==========================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyDsLhHdxNt06_QLAnpoC2ZoJQG0ZweXZ70",
+      authDomain: "ingresoestudiante-fbde0.firebaseapp.com",
+      projectId: "ingresoestudiante-fbde0",
+      storageBucket: "ingresoestudiante-fbde0.firebasestorage.app",
+      messagingSenderId: "309792158081",
+      appId: "1:309792158081:web:aa1ee1a3ec28380eaeb880",
+      measurementId: "G-G7WNR43P2P"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let listaEstudiantesGlobal = [];
+
+    // ==========================================
+    // 3. CONSULTAR DATOS Y LLENAR TABLAS
+    // ==========================================
+    async function cargarDatosAdmin() {
+      // 1. Estudiantes
+      db.collection('estudiantes').onSnapshot((snapshot) => {
+        listaEstudiantesGlobal = [];
+        const tbody = document.getElementById('tbody-estudiantes');
+        tbody.innerHTML = '';
+        
+        document.getElementById('count-estudiantes').innerText = snapshot.size;
+
+        if (snapshot.empty) {
+          tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No hay estudiantes registrados.</td></tr>';
+          return;
+        }
+
+        snapshot.forEach(doc => {
+          const est = { id: doc.id, ...doc.data() };
+          listaEstudiantesGlobal.push(est);
+        });
+
+        renderizarEstudiantes(listaEstudiantesGlobal);
+      });
+
+      // 2. Asistencias
+      db.collection('asistencias').orderBy('fecha_hora', 'desc').limit(50).onSnapshot((snapshot) => {
+        const tbody = document.getElementById('tbody-asistencias');
+        tbody.innerHTML = '';
+        document.getElementById('count-asistencias').innerText = snapshot.size;
+
+        if (snapshot.empty) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Aún no se registran asistencias por cámara.</td></tr>';
+          return;
+        }
+
+        snapshot.forEach(doc => {
+          const a = doc.data();
+          const fecha = new Date(a.fecha_hora).toLocaleString();
+          tbody.innerHTML += `
+            <tr>
+              <td style="color: var(--cyan-neon); font-weight:700;">${fecha}</td>
+              <td>${a.cedula || '---'}</td>
+              <td><strong>${a.nombre_completo || '---'}</strong></td>
+              <td>${a.clase || '---'}</td>
+              <td>${a.profesor || '---'}</td>
+              <td><span style="background:rgba(16,185,129,0.2); color:#34d399; padding:4px 8px; border-radius:12px; font-weight:700;">${a.estado || 'Presente'}</span></td>
+            </tr>
+          `;
+        });
+      });
+    }
+
+    function renderizarEstudiantes(lista) {
+      const tbody = document.getElementById('tbody-estudiantes');
+      tbody.innerHTML = '';
+
+      lista.forEach(est => {
+        const foto = est.foto_base64 || "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='44' fill='%2338bdf8'><circle cx='22' cy='22' r='20'/></svg>";
+        tbody.innerHTML += `
+          <tr>
+            <td><img src="${foto}" class="student-img-mini" alt="Rostro"></td>
+            <td><strong>${est.cedula || '---'}</strong></td>
+            <td>${est.nombre_completo || '---'}</td>
+            <td>${est.edad ? est.edad + ' años' : '---'} <br><small style="color:var(--cyan-light);">${est.estado_civil || ''}</small></td>
+            <td><small>P: ${est.nombre_padre || '---'}<br>M: ${est.nombre_madre || '---'}</small></td>
+            <td><strong>${est.clase_actual || '---'}</strong><br><small style="color:var(--text-muted);">${est.nombre_profesor || ''}</small></td>
+            <td><button class="btn-delete" onclick="eliminarEstudiante('${est.id}', '${est.nombre_completo}')">Eliminar</button></td>
+          </tr>
+        `;
+      });
+    }
+
+    // Buscador en tiempo real
+    document.getElementById('search-estudiante').addEventListener('input', (e) => {
+      const val = e.target.value.toLowerCase();
+      const filtrados = listaEstudiantesGlobal.filter(est => 
+        (est.nombre_completo && est.nombre_completo.toLowerCase().includes(val)) ||
+        (est.cedula && est.cedula.toLowerCase().includes(val))
+      );
+      renderizarEstudiantes(filtrados);
+    });
+
+    // Función para borrar estudiante
+    window.eliminarEstudiante = async (id, nombre) => {
+      if (confirm(`¿Estás seguro de que deseas eliminar el registro de ${nombre}?`)) {
+        try {
+          await db.collection('estudiantes').doc(id).delete();
+        } catch (err) {
+          alert("Error al eliminar: " + err.message);
+        }
+      }
+    };
+  </script>
+</body>
+</html>
