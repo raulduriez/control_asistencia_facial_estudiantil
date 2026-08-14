@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Asistencia Biométrico - UNRMA</title>
+  
+  <!-- Tipografía Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- face-api.js & Firebase Compat -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script defer src="./app.js"></script>
+
+  <style>
+    :root {
+      /* Color institucional de la imagen */
+      --institucional-blue: #008fd3;
+      --institucional-dark: #004d73;
+      --bg-gradient: radial-gradient(circle at 50% 10%, #005e8a 0%, #021a2e 50%, #010c17 100%);
+      
+      /* Efectos de Luz Celestes */
+      --cyan-light: #38bdf8;
+      --cyan-neon: #00e5ff;
+      --glow-light: 0 0 25px rgba(0, 229, 255, 0.45);
+      --card-bg: rgba(2, 26, 46, 0.85);
+      --border-glow: rgba(0, 229, 255, 0.35);
+      
+      --text-main: #f0f9ff;
+      --text-muted: #93c5fd;
+      --success: #10b981;
+      --danger: #f43f5e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Resplandor ambiental de fondo */
+    body::before {
+      content: '';
+      position: absolute;
+      top: -10%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 750px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(0, 143, 211, 0.3) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Encabezado Institucional */
+    header {
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: rgba(0, 143, 211, 0.15);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      backdrop-filter: blur(12px);
+      padding: 14px 30px;
+      border-radius: 20px;
+      box-shadow: var(--glow-light);
+      margin-bottom: 12px;
+    }
+
+    .brand-logo {
+      height: 70px;
+      width: auto;
+      filter: drop-shadow(0 0 10px rgba(0, 229, 255, 0.6));
+    }
+
+    .brand-text {
+      text-align: left;
+    }
+
+    .brand-text h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 1.15rem;
+      letter-spacing: 1.5px;
+      color: #ffffff;
+      line-height: 1.2;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    }
+
+    .brand-text p {
+      font-size: 0.85rem;
+      color: var(--cyan-light);
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    .status-bar {
+      font-size: 0.92rem;
+      color: #e0f2fe;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 8px 24px;
+      border-radius: 30px;
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      margin-top: 8px;
+      box-shadow: inset 0 0 12px rgba(0, 229, 255, 0.1);
+    }
+
+    .top-actions {
+      margin-top: 14px;
+    }
+
+    /* Dashboard */
+    .dashboard-container {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr;
+      gap: 24px;
+      width: 100%;
+      max-width: 1200px;
+      position: relative;
+      z-index: 1;
+    }
+
+    @media (max-width: 920px) {
+      .dashboard-container { grid-template-columns: 1fr; }
+      .brand-container { flex-direction: column; text-align: center; }
+      .brand-text { text-align: center; }
+    }
+
+    /* Tarjetas con Efecto Luz */
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border-glow);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(0, 143, 211, 0.1);
+      position: relative;
+    }
+
+    /* Cámara y Escáner Láser */
+    .camera-box {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4/3;
+      background: #010810;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid var(--institucional-blue);
+      box-shadow: 0 0 25px rgba(0, 143, 211, 0.35);
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    /* Línea de escaneo láser animada */
+    .laser-scanner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, transparent, var(--cyan-neon), transparent);
+      box-shadow: 0 0 15px var(--cyan-neon);
+      animation: scanLaser 3s infinite ease-in-out;
+      pointer-events: none;
+    }
+
+    @keyframes scanLaser {
+      0% { top: 5%; opacity: 0.2; }
+      50% { top: 90%; opacity: 1; }
+      100% { top: 5%; opacity: 0.2; }
+    }
+
+    .btn-container {
+      margin-top: 18px;
+      display: flex;
+      justify-content: center;
+    }
+
+    /* Botones Neón */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--institucional-blue) 0%, #00b4d8 100%);
+      color: #ffffff;
+      border: 1px solid var(--cyan-neon);
+      padding: 13px 30px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(0, 143, 211, 0.5);
+      transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(0, 229, 255, 0.8);
+      background: linear-gradient(135deg, #00b4d8 0%, var(--cyan-neon) 100%);
+      color: #011627;
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: rgba(0, 143, 211, 0.2);
+      border: 1px solid var(--cyan-light);
+      color: #ffffff;
+      padding: 9px 20px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 10px rgba(0, 143, 211, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: var(--institucional-blue);
+      box-shadow: 0 0 20px var(--cyan-neon);
+    }
+
+    /* Ficha del Estudiante */
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+    }
+
+    .card-header h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .badge {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .badge.success {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid #10b981;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.4);
+    }
+
+    .badge.danger {
+      background: rgba(244, 63, 94, 0.2);
+      color: #fb7185;
+      border: 1px solid #f43f5e;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 16px;
+    }
+
+    .info-item {
+      background: rgba(0, 143, 211, 0.08);
+      border: 1px solid rgba(0, 229, 255, 0.15);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .info-item.full-width {
+      grid-column: span 2;
+      background: rgba(0, 143, 211, 0.2);
+      border-color: rgba(0, 229, 255, 0.4);
+      box-shadow: inset 0 0 15px rgba(0, 229, 255, 0.1);
+    }
+
+    .info-item label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--cyan-light);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .info-item span {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .highlight-clock {
+      color: var(--cyan-neon) !important;
+      font-size: 1.25rem !important;
+      font-weight: 800 !important;
+      text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+    }
+
+    /* Calificaciones */
+    .grades-wrapper {
+      margin-top: 18px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(0, 229, 255, 0.2);
+    }
+
+    .grades-wrapper h3 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--cyan-light);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .grades-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .grades-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(0, 229, 255, 0.1);
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 0.88rem;
+    }
+
+    .grades-list li .score {
+      color: var(--cyan-neon);
+      font-weight: 700;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(1, 12, 23, 0.88);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-box {
+      background: #021a2e;
+      border: 2px solid var(--institucional-blue);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 640px;
+      padding: 26px;
+      box-shadow: 0 0 40px rgba(0, 143, 211, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .modal-header h3 {
+      font-size: 1.25rem;
+      color: var(--cyan-light);
+    }
+
+    .btn-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.6rem;
+      cursor: pointer;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .input-group label {
+      font-size: 0.76rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .input-group input, .input-group select {
+      background: #010c17;
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      color: #fff;
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .input-group input:focus, .input-group select:focus {
+      border-color: var(--cyan-neon);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.4);
+    }
+
+    .modal-footer {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <!-- Contenedor con el logo y nombre de la universidad -->
+    <div class="brand-container">
+      <img src="./logo.png" alt="Logo Universidad Nacional Multidisciplinaria Ricardo Morales Avilés" class="brand-logo" onerror="this.style.display='none'">
+      <div class="brand-text">
+        <h1>Universidad Nacional Multidisciplinaria</h1>
+        <p>Ricardo Morales Avilés</p>
+      </div>
+    </div>
+
+    <div id="status-bar" class="status-bar">Iniciando módulos de Inteligencia Artificial...</div>
+    <div class="top-actions">
+      <button id="btn-open-modal" class="btn-secondary">➕ Registrar Nuevo Estudiante</button>
+    </div>
+  </header>
+
+  <main class="dashboard-container">
+    <!-- Cámara y Láser de Reconocimiento -->
+    <section class="card">
+      <div class="camera-box">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div class="laser-scanner"></div>
+      </div>
+      <div class="btn-container">
+        <button id="btn-scan" class="btn-primary" disabled>
+          <span>📸</span> Escanear Rostro
+        </button>
+      </div>
+    </section>
+
+    <!-- Ficha del Estudiante -->
+    <section class="card">
+      <div class="card-header">
+        <h2>Ficha Académica</h2>
+        <span id="badge-estado" class="badge">En Espera</span>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-item">
+          <label>Nombre Completo</label>
+          <span id="lbl-nombre">---</span>
+        </div>
+        <div class="info-item">
+          <label>Cédula</label>
+          <span id="lbl-cedula">---</span>
+        </div>
+        <div class="info-item">
+          <label>Edad</label>
+          <span id="lbl-edad">---</span>
+        </div>
+        <div class="info-item">
+          <label>Estado Civil</label>
+          <span id="lbl-civil">---</span>
+        </div>
+        <div class="info-item">
+          <label>Nombre del Padre</label>
+          <span id="lbl-padre">---</span>
+        </div>
+        <div class="info-item">
+          <label>Nombre de la Madre</label>
+          <span id="lbl-madre">---</span>
+        </div>
+        <div class="info-item">
+          <label>Clase que Recibe</label>
+          <span id="lbl-clase">---</span>
+        </div>
+        <div class="info-item">
+          <label>Profesor</label>
+          <span id="lbl-profesor">---</span>
+        </div>
+        <div class="info-item full-width">
+          <label>Hora de Registro de Asistencia</label>
+          <span id="lbl-hora" class="highlight-clock">--:--:--</span>
+        </div>
+      </div>
+
+      <div class="grades-wrapper">
+        <h3>Calificaciones de Tareas</h3>
+        <ul id="lista-tareas" class="grades-list">
+          <li style="color: var(--text-muted); justify-content: center;">En espera de escaneo facial</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal para Enrolar Estudiantes -->
+  <div id="modal-registro" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Enrolamiento Facial de Estudiante</h3>
+        <button id="btn-close-modal" class="btn-close">&times;</button>
+      </div>
+      
+      <p style="font-size:0.85rem; color: var(--cyan-light);">
+        Ubique al estudiante frente a la cámara antes de presionar guardar:
+      </p>
+
+      <form id="form-registro">
+        <div class="form-grid">
+          <div class="input-group">
+            <label>Cédula / Identificación:</label>
+            <input type="text" id="reg-cedula" required placeholder="001-000000-0000A">
+          </div>
+          <div class="input-group">
+            <label>Nombre Completo:</label>
+            <input type="text" id="reg-nombre" required placeholder="Nombre y Apellidos">
+          </div>
+          <div class="input-group">
+            <label>Edad:</label>
+            <input type="number" id="reg-edad" required placeholder="21">
+          </div>
+          <div class="input-group">
+            <label>Estado Civil:</label>
+            <select id="reg-civil" required>
+              <option value="Soltero/a">Soltero/a</option>
+              <option value="Casado/a">Casado/a</option>
+              <option value="Divorciado/a">Divorciado/a</option>
+              <option value="Unión de hecho">Unión de hecho</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label>Nombre del Padre:</label>
+            <input type="text" id="reg-padre" required placeholder="Nombre completo del padre">
+          </div>
+          <div class="input-group">
+            <label>Nombre de la Madre:</label>
+            <input type="text" id="reg-madre" required placeholder="Nombre completo de la madre">
+          </div>
+          <div class="input-group">
+            <label>Clase Asignada:</label>
+            <input type="text" id="reg-clase" required placeholder="Ej: Redes y Telecomunicaciones">
+          </div>
+          <div class="input-group">
+            <label>Profesor Titular:</label>
+            <input type="text" id="reg-profesor" required placeholder="Docente a cargo">
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <span id="reg-status" style="font-size: 0.85rem; color: var(--cyan-light);"></span>
+          <button type="submit" id="btn-guardar" class="btn-primary">Capturar Rostro y Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>
