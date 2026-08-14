@@ -1,5 +1,5 @@
 // ==========================================
-// 1. CONFIGURACIÓN DE FIREBASE (Tus Credenciales)
+// 1. CONFIGURACIÓN FIREBASE
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyDsLhHdxNt06_QLAnpoC2ZoJQG0ZweXZ70",
@@ -11,12 +11,11 @@ const firebaseConfig = {
   measurementId: "G-G7WNR43P2P"
 };
 
-// Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 // ==========================================
-// 2. REFERENCIAS DEL DOM
+// 2. REFERENCIAS DOM
 // ==========================================
 const video = document.getElementById('webcam');
 const btnScan = document.getElementById('btn-scan');
@@ -31,12 +30,13 @@ const regStatus = document.getElementById('reg-status');
 let cacheEstudiantes = [];
 
 // ==========================================
-// 3. INICIAR IA Y CÁMARA
+// 3. INICIAR CÁMARA Y MODELOS EN MÓVIL
 // ==========================================
 async function init() {
   try {
-    statusBar.innerText = "⏳ Cargando modelos de Inteligencia Artificial...";
+    statusBar.innerText = "⏳ Descargando modelos de IA...";
     
+    // Modelos de face-api.js desde repositorio público estable
     const MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
     
     await Promise.all([
@@ -45,25 +45,39 @@ async function init() {
       faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
     ]);
 
-    statusBar.innerText = "📷 Conectando con la cámara...";
-    
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
-      audio: false
-    });
-    video.srcObject = stream;
+    statusBar.innerText = "📷 Solicitando permiso de cámara...";
 
-    statusBar.innerText = "📥 Sincronizando datos desde Firebase...";
+    // Configuración para Móviles (Android / iPhone)
+    const constraints = {
+      audio: false,
+      video: {
+        facingMode: { ideal: "user" }, // Cámara frontal
+        width: { ideal: 640 },
+        height: { ideal: 480 }
+      }
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    
+    // Atributos obligatorios para móviles
+    video.setAttribute("playsinline", "true");
+    video.setAttribute("webkit-playsinline", "true");
+    video.muted = true;
+    
+    await video.play();
+
+    statusBar.innerText = "📥 Conectando con la base de datos...";
     await cargarEstudiantes();
 
-    statusBar.innerText = "✅ Sistema listo. Enfoque el rostro y presione 'Escanear Rostro'.";
+    statusBar.innerText = "⚡ Sistema listo en móvil. Presiona 'Escanear Rostro'.";
     btnScan.disabled = false;
 
   } catch (err) {
-    if (err.name === "NotFoundError" || err.message.includes("Requested device not found")) {
-      statusBar.innerText = "❌ Error: No se detectó ninguna cámara web conectada.";
-    } else if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-      statusBar.innerText = "❌ Permiso denegado: Habilite el permiso de cámara en el navegador.";
+    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+      statusBar.innerText = "❌ Permiso denegado. Ve a los ajustes del navegador y autoriza la cámara.";
+    } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+      statusBar.innerText = "❌ No se encontró cámara frontal disponible.";
     } else {
       statusBar.innerText = "❌ Error: " + err.message;
     }
@@ -72,7 +86,7 @@ async function init() {
 }
 
 // ==========================================
-// 4. LEER ESTUDIANTES DE FIRESTORE
+// 4. DESCARGA DE ROSTROS REGISTRADOS
 // ==========================================
 async function cargarEstudiantes() {
   try {
@@ -89,32 +103,33 @@ async function cargarEstudiantes() {
         });
       }
     });
-    console.log(`Cargados ${cacheEstudiantes.length} estudiantes con rostro.`);
+    console.log(`Base de datos sincronizada: ${cacheEstudiantes.length} estudiantes.`);
   } catch (e) {
-    console.error("Error al cargar estudiantes de Firebase:", e);
+    console.error("Error al cargar estudiantes:", e);
     statusBar.innerText = "⚠️ Error al conectar con Firestore. Revisa las reglas de seguridad.";
   }
 }
 
 // ==========================================
-// 5. ESCANEO Y RECONOCIMIENTO
+// 5. ESCANEO Y ASISTENCIA (AJUSTADO PARA MÓVIL)
 // ==========================================
 btnScan.addEventListener('click', async () => {
-  statusBar.innerText = "🔍 Analizando rostro en cámara...";
+  statusBar.innerText = "🔍 Analizando rostro...";
 
+  // TinyFaceDetector optimizado para procesadores de celular
   const detection = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
 
   if (!detection) {
-    statusBar.innerText = "⚠️ No se detectó ningún rostro visible. Mira directamente al lente.";
+    statusBar.innerText = "⚠️ No se detectó rostro. Sostén el móvil firme frente a tu cara.";
     return;
   }
 
   const detectedDescriptor = detection.descriptor;
   let match = null;
-  let menorDistancia = 0.55; // Umbral de tolerancia de coincidencia
+  let menorDistancia = 0.55; // Tolerancia euclidiana
 
   cacheEstudiantes.forEach(est => {
     const distancia = faceapi.euclideanDistance(est.descriptor, detectedDescriptor);
@@ -125,7 +140,7 @@ btnScan.addEventListener('click', async () => {
   });
 
   if (match) {
-    statusBar.innerText = `✅ ¡Identificado! Estudiante: ${match.nombre_completo}`;
+    statusBar.innerText = `✅ ¡Identificado! ${match.nombre_completo}`;
     mostrarFicha(match);
     await registrarAsistenciaFirestore(match);
   } else {
@@ -159,24 +174,21 @@ function mostrarFicha(est) {
   listaTareas.innerHTML = '';
   if (est.calificaciones_tareas && est.calificaciones_tareas.length > 0) {
     est.calificaciones_tareas.forEach(t => {
-      listaTareas.innerHTML += `<li><span>${t.tarea}</span> <strong>${t.nota}/100</strong></li>`;
+      listaTareas.innerHTML += `<li><span>${t.tarea}</span> <span class="score">${t.nota}/100</span></li>`;
     });
   } else {
-    listaTareas.innerHTML = '<li class="empty-msg">Sin tareas registradas.</li>';
+    listaTareas.innerHTML = '<li style="justify-content:center;">Sin tareas registradas.</li>';
   }
 }
 
 function limpiarFicha() {
   document.querySelectorAll('.info-grid span').forEach(el => el.innerText = '---');
-  document.getElementById('lista-tareas').innerHTML = '<li class="empty-msg">Sin datos disponibles.</li>';
+  document.getElementById('lista-tareas').innerHTML = '<li style="justify-content:center;">Sin datos disponibles.</li>';
   const badge = document.getElementById('badge-estado');
   badge.innerText = "No Reconocido";
-  badge.className = "badge error";
+  badge.className = "badge danger";
 }
 
-// ==========================================
-// 7. GUARDAR ASISTENCIA EN FIRESTORE
-// ==========================================
 async function registrarAsistenciaFirestore(est) {
   try {
     await db.collection('asistencias').add({
@@ -188,29 +200,28 @@ async function registrarAsistenciaFirestore(est) {
       fecha_hora: new Date().toISOString(),
       estado: "Presente"
     });
-    console.log("Asistencia registrada en la colección 'asistencias'.");
   } catch (e) {
     console.error("Error al registrar asistencia:", e);
   }
 }
 
 // ==========================================
-// 8. ENROLAR / REGISTRAR NUEVO ESTUDIANTE
+// 7. REGISTRO DE NUEVO ESTUDIANTE
 // ==========================================
 btnOpenModal.addEventListener('click', () => modal.style.display = 'flex');
 btnCloseModal.addEventListener('click', () => modal.style.display = 'none');
 
 formRegistro.addEventListener('submit', async (e) => {
   e.preventDefault();
-  regStatus.innerText = "Escaneando rostro para vincularlo...";
+  regStatus.innerText = "Capturando rostro...";
 
   const detection = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
 
   if (!detection) {
-    regStatus.innerText = "❌ No se detectó rostro. Mira fijamente a la cámara.";
+    regStatus.innerText = "❌ No se detectó rostro. Sostén el móvil firme frente a tu cara.";
     return;
   }
 
@@ -226,8 +237,8 @@ formRegistro.addEventListener('submit', async (e) => {
     clase_actual: document.getElementById('reg-clase').value,
     nombre_profesor: document.getElementById('reg-profesor').value,
     calificaciones_tareas: [
-      { tarea: "Tarea Diagnóstica 1", nota: 100 },
-      { tarea: "Guía Práctica Inicial", nota: 90 }
+      { tarea: "Tarea Diagnóstica", nota: 100 },
+      { tarea: "Práctica Evaluada 1", nota: 92 }
     ],
     face_descriptor: faceDescriptorArray,
     fecha_creacion: new Date().toISOString()
@@ -236,21 +247,21 @@ formRegistro.addEventListener('submit', async (e) => {
   try {
     regStatus.innerText = "Guardando en Firebase...";
     await db.collection('estudiantes').add(nuevoEstudiante);
-    regStatus.innerText = "✅ ¡Estudiante guardado con éxito!";
+    regStatus.innerText = "✅ Guardado correctamente.";
     
-    await cargarEstudiantes(); // Actualizar lista local
+    await cargarEstudiantes();
     
     setTimeout(() => {
       formRegistro.reset();
       regStatus.innerText = "";
       modal.style.display = 'none';
-    }, 1500);
+    }, 1200);
 
   } catch (err) {
-    regStatus.innerText = "❌ Error al guardar: " + err.message;
+    regStatus.innerText = "❌ Error: " + err.message;
     console.error(err);
   }
 });
 
-// Iniciar al cargar la ventana
+// Arrancar al cargar la página
 window.addEventListener('DOMContentLoaded', init);
