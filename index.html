@@ -178,13 +178,16 @@
       background: linear-gradient(135deg, var(--institucional-blue) 0%, #00b4d8 100%);
       color: #ffffff;
       border: 1px solid var(--cyan-neon);
-      padding: 13px 30px;
+      padding: 12px 26px;
       font-size: 0.95rem;
       font-weight: 700;
       border-radius: 10px;
       cursor: pointer;
       box-shadow: 0 0 20px rgba(0, 143, 211, 0.5);
       transition: all 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .btn-primary:hover:not(:disabled) {
@@ -197,6 +200,7 @@
     .btn-primary:disabled {
       opacity: 0.4;
       cursor: not-allowed;
+      box-shadow: none;
     }
 
     .btn-secondary {
@@ -210,7 +214,16 @@
       cursor: pointer;
     }
 
-    /* Ficha de Estudiante con Foto */
+    .btn-capture {
+      background: #0284c7;
+      color: white;
+      border: 1px solid var(--cyan-light);
+      padding: 10px 18px;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -337,7 +350,7 @@
       font-size: 0.85rem;
     }
 
-    /* Modal */
+    /* Modal de Registro Mejorado */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -368,17 +381,39 @@
       margin-bottom: 10px;
     }
 
-    .modal-header h3 {
-      font-size: 1.2rem;
-      color: var(--cyan-light);
-    }
-
     .btn-close {
       background: transparent;
       border: none;
       color: var(--text-muted);
       font-size: 1.6rem;
       cursor: pointer;
+    }
+
+    /* Sección de Captura dentro del modal */
+    .modal-capture-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: rgba(0, 143, 211, 0.15);
+      border: 1px dashed var(--cyan-light);
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+
+    .preview-box {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      border: 2px solid var(--cyan-neon);
+      object-fit: cover;
+      background: #010810;
+    }
+
+    .capture-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
 
     .form-grid {
@@ -390,6 +425,7 @@
 
     @media (max-width: 600px) {
       .form-grid { grid-template-columns: 1fr; }
+      .modal-capture-section { flex-direction: column; text-align: center; }
     }
 
     .input-group {
@@ -439,7 +475,7 @@
   </header>
 
   <main class="dashboard-container">
-    <!-- Panel Cámara -->
+    <!-- Panel Cámara Principal -->
     <section class="card">
       <div class="camera-box">
         <video id="webcam" autoplay playsinline muted></video>
@@ -460,7 +496,6 @@
         <span id="badge-estado" class="badge">En Espera</span>
       </div>
 
-      <!-- Foto del Estudiante Reconocido -->
       <div class="student-profile-header">
         <img id="img-perfil" class="student-avatar" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='75' height='75' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>" alt="Foto Estudiante">
         <div>
@@ -517,17 +552,22 @@
     </section>
   </main>
 
-  <!-- Modal para Enrolar -->
+  <!-- Modal con 2 Botones: 1. Capturar Rostro | 2. Guardar Estudiante -->
   <div id="modal-registro" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>Registrar Estudiante y Capturar Foto</h3>
+        <h3 style="color: var(--cyan-light);">Nuevo Estudiante: Captura y Registro</h3>
         <button id="btn-close-modal" class="btn-close">&times;</button>
       </div>
-      
-      <p style="font-size:0.85rem; color: var(--cyan-light);">
-        Mira fijamente a la cámara del teléfono y presiona guardar:
-      </p>
+
+      <!-- Sección del Paso 1: Captura Facial -->
+      <div class="modal-capture-section">
+        <img id="reg-preview" class="preview-box" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='%2364748b'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>" alt="Previa Foto">
+        <div class="capture-info">
+          <p style="font-size: 0.82rem; color: #fff;"><strong>Paso 1:</strong> Enfoque su rostro a la cámara y presione el botón:</p>
+          <button type="button" id="btn-capturar-rostro" class="btn-capture">📸 1. Capturar Rostro</button>
+        </div>
+      </div>
 
       <form id="form-registro">
         <div class="form-grid">
@@ -570,9 +610,10 @@
           </div>
         </div>
 
+        <!-- Sección del Paso 2: Guardar -->
         <div class="modal-footer">
-          <span id="reg-status" style="font-size: 0.85rem; color: var(--cyan-light);"></span>
-          <button type="submit" id="btn-guardar" class="btn-primary">📸 Capturar Foto y Guardar</button>
+          <span id="reg-status" style="font-size: 0.85rem; color: var(--cyan-light);">Rostro no capturado</span>
+          <button type="submit" id="btn-guardar" class="btn-primary" disabled>💾 2. Guardar Estudiante</button>
         </div>
       </form>
     </div>
