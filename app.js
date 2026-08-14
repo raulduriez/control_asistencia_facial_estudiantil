@@ -21,15 +21,23 @@ const video = document.getElementById('webcam');
 const btnScan = document.getElementById('btn-scan');
 const statusBar = document.getElementById('status-bar');
 
+// Elementos del Modal
 const modal = document.getElementById('modal-registro');
 const btnOpenModal = document.getElementById('btn-open-modal');
 const btnCloseModal = document.getElementById('btn-close-modal');
+const btnCapturarRostro = document.getElementById('btn-capturar-rostro');
+const btnGuardar = document.getElementById('btn-guardar');
 const formRegistro = document.getElementById('form-registro');
 const regStatus = document.getElementById('reg-status');
+const regPreview = document.getElementById('reg-preview');
 
 const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='75' height='75' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
 
 let cacheEstudiantes = [];
+
+// Variables temporales para la captura en progreso
+let tempFaceDescriptor = null;
+let tempFotoBase64 = null;
 
 // ==========================================
 // 3. INICIAR CÁMARA Y MODELOS
@@ -148,12 +156,10 @@ function mostrarFicha(est) {
   const ahora = new Date();
   const horaStr = ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  // Foto y Cabecera
   document.getElementById('img-perfil').src = est.foto_base64 || DEFAULT_AVATAR;
   document.getElementById('lbl-nombre-titulo').innerText = est.nombre_completo || 'Sin Identificar';
   document.getElementById('lbl-cedula-sub').innerText = `Cédula: ${est.cedula || '---'}`;
 
-  // Datos Generales
   document.getElementById('lbl-nombre').innerText = est.nombre_completo || '---';
   document.getElementById('lbl-cedula').innerText = est.cedula || '---';
   document.getElementById('lbl-edad').innerText = (est.edad ? `${est.edad} años` : '---');
@@ -168,7 +174,6 @@ function mostrarFicha(est) {
   badge.innerText = "Asistencia Registrada";
   badge.className = "badge success";
 
-  // Calificaciones
   const listaTareas = document.getElementById('lista-tareas');
   listaTareas.innerHTML = '';
   if (est.calificaciones_tareas && est.calificaciones_tareas.length > 0) {
@@ -209,30 +214,38 @@ async function registrarAsistenciaFirestore(est) {
 }
 
 // ==========================================
-// 7. CAPTURA DE FOTO + BIOMETRÍA EN REGISTRO
+// 7. REGISTRO PASO 1: CAPTURAR ROSTRO
 // ==========================================
-btnOpenModal.addEventListener('click', () => modal.style.display = 'flex');
+btnOpenModal.addEventListener('click', () => {
+  // Limpiar formulario y variables al abrir modal
+  tempFaceDescriptor = null;
+  tempFotoBase64 = null;
+  regPreview.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='%2364748b'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
+  regStatus.innerText = "⚠️ Rostro pendiente de captura";
+  regStatus.style.color = "#fb7185";
+  btnGuardar.disabled = true;
+  modal.style.display = 'flex';
+});
+
 btnCloseModal.addEventListener('click', () => modal.style.display = 'none');
 
-// Función para extraer la foto del video en Base64
 function capturarFotoCanvas() {
   const canvasTemp = document.createElement('canvas');
   canvasTemp.width = 300;
   canvasTemp.height = 300;
   const ctx = canvasTemp.getContext('2d');
   
-  // Recorte centrado para que quede cuadrada tipo foto carnet
   const minDim = Math.min(video.videoWidth, video.videoHeight);
   const startX = (video.videoWidth - minDim) / 2;
   const startY = (video.videoHeight - minDim) / 2;
 
   ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, 300, 300);
-  return canvasTemp.toDataURL('image/jpeg', 0.8);
+  return canvasTemp.toDataURL('image/jpeg', 0.85);
 }
 
-formRegistro.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  regStatus.innerText = "📸 Capturando rostro y procesando biometría...";
+btnCapturarRostro.addEventListener('click', async () => {
+  regStatus.innerText = "🔍 Analizando rostro en vivo...";
+  regStatus.style.color = "#38bdf8";
 
   const detection = await faceapi
     .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
@@ -240,13 +253,39 @@ formRegistro.addEventListener('submit', async (e) => {
     .withFaceDescriptor();
 
   if (!detection) {
-    regStatus.innerText = "❌ No se vio tu rostro. Sostén el móvil frente a ti y presiona guardar.";
+    regStatus.innerText = "❌ No se detectó rostro. Mire al lente.";
+    regStatus.style.color = "#fb7185";
+    btnGuardar.disabled = true;
     return;
   }
 
-  // Capturar la foto real de la cámara
-  const fotoBase64 = capturarFotoCanvas();
-  const faceDescriptorArray = Array.from(detection.descriptor);
+  // Guardar en variables temporales
+  tempFotoBase64 = capturarFotoCanvas();
+  tempFaceDescriptor = Array.from(detection.descriptor);
+
+  // Mostrar foto capturada en el modal
+  regPreview.src = tempFotoBase64;
+  regStatus.innerText = "✅ Rostro capturado. Ya puede guardar.";
+  regStatus.style.color = "#34d399";
+  
+  // Habilitar el segundo botón de guardar
+  btnGuardar.disabled = false;
+});
+
+// ==========================================
+// 8. REGISTRO PASO 2: GUARDAR EN FIRESTORE
+// ==========================================
+formRegistro.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  if (!tempFaceDescriptor || !tempFotoBase64) {
+    alert("Primero debes presionar el botón '1. Capturar Rostro'.");
+    return;
+  }
+
+  regStatus.innerText = "Guardando en Firebase...";
+  regStatus.style.color = "#38bdf8";
+  btnGuardar.disabled = true;
 
   const nuevoEstudiante = {
     cedula: document.getElementById('reg-cedula').value,
@@ -257,30 +296,31 @@ formRegistro.addEventListener('submit', async (e) => {
     nombre_madre: document.getElementById('reg-madre').value,
     clase_actual: document.getElementById('reg-clase').value,
     nombre_profesor: document.getElementById('reg-profesor').value,
-    foto_base64: fotoBase64, // Guardar imagen capturada
+    foto_base64: tempFotoBase64,
     calificaciones_tareas: [
       { tarea: "Tarea Diagnóstica", nota: 100 },
       { tarea: "Práctica Evaluada 1", nota: 95 }
     ],
-    face_descriptor: faceDescriptorArray,
+    face_descriptor: tempFaceDescriptor,
     fecha_creacion: new Date().toISOString()
   };
 
   try {
-    regStatus.innerText = "Guardando datos y foto en Firebase...";
     await db.collection('estudiantes').add(nuevoEstudiante);
-    regStatus.innerText = "✅ ¡Estudiante y foto registrados exitosamente!";
+    regStatus.innerText = "✅ ¡Estudiante registrado con éxito!";
+    regStatus.style.color = "#34d399";
     
-    await cargarEstudiantes(); // Actualizar lista local
+    await cargarEstudiantes();
     
     setTimeout(() => {
       formRegistro.reset();
-      regStatus.innerText = "";
       modal.style.display = 'none';
     }, 1500);
 
   } catch (err) {
     regStatus.innerText = "❌ Error al guardar: " + err.message;
+    regStatus.style.color = "#fb7185";
+    btnGuardar.disabled = false;
     console.error(err);
   }
 });
