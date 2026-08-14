@@ -18,10 +18,10 @@ const db = firebase.firestore();
 // 2. REFERENCIAS DOM
 // ==========================================
 const video = document.getElementById('webcam');
+const flashScreen = document.getElementById('flash-screen');
 const btnScan = document.getElementById('btn-scan');
 const statusBar = document.getElementById('status-bar');
 
-// Elementos del Modal
 const modal = document.getElementById('modal-registro');
 const btnOpenModal = document.getElementById('btn-open-modal');
 const btnCloseModal = document.getElementById('btn-close-modal');
@@ -34,8 +34,6 @@ const regPreview = document.getElementById('reg-preview');
 const DEFAULT_AVATAR = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='75' height='75' viewBox='0 0 24 24' fill='%2338bdf8'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
 
 let cacheEstudiantes = [];
-
-// Variables temporales para la captura en progreso
 let tempFaceDescriptor = null;
 let tempFotoBase64 = null;
 
@@ -59,7 +57,7 @@ async function init() {
     const constraints = {
       audio: false,
       video: {
-        facingMode: { ideal: "user" },
+        facingMode: "user",
         width: { ideal: 640 },
         height: { ideal: 480 }
       }
@@ -69,7 +67,13 @@ async function init() {
     video.srcObject = stream;
     video.setAttribute("playsinline", "true");
     video.muted = true;
-    await video.play();
+    
+    await new Promise((resolve) => {
+      video.onloadedmetadata = () => {
+        video.play();
+        resolve();
+      };
+    });
 
     statusBar.innerText = "📥 Sincronizando con Firebase...";
     await cargarEstudiantes();
@@ -150,7 +154,7 @@ btnScan.addEventListener('click', async () => {
 });
 
 // ==========================================
-// 6. MOSTRAR DATOS Y FOTO EN PANTALLA
+// 6. MOSTRAR DATOS EN FICHA
 // ==========================================
 function mostrarFicha(est) {
   const ahora = new Date();
@@ -214,13 +218,12 @@ async function registrarAsistenciaFirestore(est) {
 }
 
 // ==========================================
-// 7. REGISTRO PASO 1: CAPTURAR ROSTRO
+// 7. REGISTRO PASO 1: CAPTURAR ROSTRO + EFECTO FLASH
 // ==========================================
 btnOpenModal.addEventListener('click', () => {
-  // Limpiar formulario y variables al abrir modal
   tempFaceDescriptor = null;
   tempFotoBase64 = null;
-  regPreview.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='%2364748b'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
+  regPreview.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='90' height='90' viewBox='0 0 24 24' fill='%2364748b'><path d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/></svg>";
   regStatus.innerText = "⚠️ Rostro pendiente de captura";
   regStatus.style.color = "#fb7185";
   btnGuardar.disabled = true;
@@ -229,47 +232,60 @@ btnOpenModal.addEventListener('click', () => {
 
 btnCloseModal.addEventListener('click', () => modal.style.display = 'none');
 
-function capturarFotoCanvas() {
+// Función segura para capturar fotograma
+function capturarCanvasSeguro() {
   const canvasTemp = document.createElement('canvas');
+  const w = video.videoWidth || 640;
+  const h = video.videoHeight || 480;
   canvasTemp.width = 300;
   canvasTemp.height = 300;
-  const ctx = canvasTemp.getContext('2d');
   
-  const minDim = Math.min(video.videoWidth, video.videoHeight);
-  const startX = (video.videoWidth - minDim) / 2;
-  const startY = (video.videoHeight - minDim) / 2;
+  const ctx = canvasTemp.getContext('2d');
+  const minDim = Math.min(w, h);
+  const startX = (w - minDim) / 2;
+  const startY = (h - minDim) / 2;
 
   ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, 300, 300);
   return canvasTemp.toDataURL('image/jpeg', 0.85);
 }
 
 btnCapturarRostro.addEventListener('click', async () => {
-  regStatus.innerText = "🔍 Analizando rostro en vivo...";
-  regStatus.style.color = "#38bdf8";
+  try {
+    regStatus.innerText = "🔍 Analizando rostro en vivo...";
+    regStatus.style.color = "#38bdf8";
 
-  const detection = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
-    .withFaceLandmarks()
-    .withFaceDescriptor();
+    // Efecto visual de Flash en la cámara
+    flashScreen.classList.add('flash-active');
+    setTimeout(() => flashScreen.classList.remove('flash-active'), 200);
 
-  if (!detection) {
-    regStatus.innerText = "❌ No se detectó rostro. Mire al lente.";
+    // Detección IA
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.45 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (!detection) {
+      regStatus.innerText = "❌ No se detectó rostro. Mire al lente.";
+      regStatus.style.color = "#fb7185";
+      btnGuardar.disabled = true;
+      return;
+    }
+
+    // Captura exitosa
+    tempFotoBase64 = capturarCanvasSeguro();
+    tempFaceDescriptor = Array.from(detection.descriptor);
+
+    regPreview.src = tempFotoBase64;
+    regStatus.innerText = "✅ ¡Rostro capturado con éxito! Ya puede guardar.";
+    regStatus.style.color = "#34d399";
+    
+    btnGuardar.disabled = false;
+
+  } catch (error) {
+    console.error("Error en captura:", error);
+    regStatus.innerText = "❌ Error en captura: " + error.message;
     regStatus.style.color = "#fb7185";
-    btnGuardar.disabled = true;
-    return;
   }
-
-  // Guardar en variables temporales
-  tempFotoBase64 = capturarFotoCanvas();
-  tempFaceDescriptor = Array.from(detection.descriptor);
-
-  // Mostrar foto capturada en el modal
-  regPreview.src = tempFotoBase64;
-  regStatus.innerText = "✅ Rostro capturado. Ya puede guardar.";
-  regStatus.style.color = "#34d399";
-  
-  // Habilitar el segundo botón de guardar
-  btnGuardar.disabled = false;
 });
 
 // ==========================================
@@ -279,7 +295,7 @@ formRegistro.addEventListener('submit', async (e) => {
   e.preventDefault();
 
   if (!tempFaceDescriptor || !tempFotoBase64) {
-    alert("Primero debes presionar el botón '1. Capturar Rostro'.");
+    alert("Primero debes presionar el botón '1. Tomar Foto / Capturar'.");
     return;
   }
 
